@@ -1,0 +1,7 @@
+Antes de iniciar usando python ./main.py:
+
+Instalar Requirements.txt
+Executar todos os querys sql no MySQL
+
+
+Durante a inserção ou modificação de dados prencher todo formulario (não tratamento de erros)
