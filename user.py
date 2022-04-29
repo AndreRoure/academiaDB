@@ -256,6 +256,13 @@ def instrutor(cpf):
             cursor.execute(f"select * from {'instrutor'} where CPF = {cpf}")
             response = cursor.fetchone()
             cursor.execute(f"select Codigo, Nome, Duracao from Aula where Instrutor_CPF = {cpf}")
+            aulas = cursor.fetchall()
+            aulas = [list(d.values()) for d in aulas]
+            heading = ['Codigo', 'Nome', 'Duracao']
+            cursor.execute(f"select * from sessoes where Instrutor_CPF = {cpf}")
+            sessoes = cursor.fetchall()
+            sessoes = [[d['Codigo'],d['Nome'],d['Data'],d['Hora']] for d in sessoes]
+            heading2 = ['Codigo','Nome','Data','Hora']
 
 
 
@@ -268,10 +275,11 @@ def instrutor(cpf):
         layout = [
             [sg.Image(size=(300, 300), data=data), sg.Text(
                 f"Nome: {response['nome']}  Email: {response['email']}  Data de Nascimento: {response['data_nascimento']}")],
-            # [sg.Frame("Treinos", [
-            #     [sg.Listbox(key='treino', values=treinos, right_click_menu=["rTreino", ["View::vTreino", "Delete"]])]]),
-            #  sg.Frame("Exames Fisicos",
-            #           [[sg.Listbox(key="exame", values=exames, right_click_menu=["rExame", ['View::vExame']])]])],
+            [sg.Button("Adicionar Aula"), sg.Button("Criar Treino")],
+            [sg.Frame("Aulas", [[sg.Table(key='aula', values=aulas, headings=heading, right_click_menu=["rAula", ["Create Session", "Delete"]])]]),
+             sg.Frame("Sessoes",
+                      [[sg.Table(key="sessao", values=sessoes, headings=heading2)]])
+                       ],
         ]
     window = sg.Window("Instrutor Page", layout)
     while True:
@@ -279,6 +287,168 @@ def instrutor(cpf):
         if event == sg.WINDOW_CLOSED:
             login()
             break
+        elif event == "Adicionar Aula":
+            addAula(cpf)
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    cursor.execute(f"select Codigo, Nome, Duracao from Aula where Instrutor_CPF = {cpf}")
+                    aulas = cursor.fetchall()
+                    aulas = [list(d.values()) for d in aulas]
+                    window['aula'].update(values=aulas)
+        elif event == "Delete":
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    cursor.execute(f"delete from aula where Codigo = {aulas[values['aula'][0]][0]}")
+                    conexao.commit()
+                    cursor.execute(f"select Codigo, Nome, Duracao from Aula where Instrutor_CPF = {cpf}")
+                    aulas = cursor.fetchall()
+                    aulas = [list(d.values()) for d in aulas]
+                    window['aula'].update(values=aulas)
+                    cursor.execute(f"select * from sessoes where Instrutor_CPF = {cpf}")
+                    sessoes = cursor.fetchall()
+                    sessoes = [[d['Codigo'], d['Nome'], d['Data'], d['Hora']] for d in sessoes]
+                    window['sessao'].update(values=sessoes)
+        elif event == "Create Session":
+            addSession(aulas[values['aula'][0]][0])
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    cursor.execute(f"select * from sessoes where Instrutor_CPF = {cpf}")
+                    sessoes = cursor.fetchall()
+                    sessoes = [[d['Codigo'], d['Nome'], d['Data'], d['Hora']] for d in sessoes]
+                    window['sessao'].update(values=sessoes)
+        elif event == "Criar Treino":
+            addTreino(cpf)
+
+
+def addAula(cpf):
+    layout = [
+        [sg.Text("Nome:"), sg.Input(key="nome")],
+        [sg.Text("Duracao"), sg.Input(key="duracao")],
+        [sg.Button("Salvar")]
+    ]
+
+    window = sg.Window("Adicionar Aula", layout)
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
+        elif event == "Salvar":
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    query = f"insert into Aula (Nome, Duracao, Instrutor_CPF) values {values['nome'], values['duracao'], cpf}"
+                    cursor.execute(query)
+                    conexao.commit()
+            window.close()
+            break
+
+def addSession(codigo):
+    layout = [
+        [sg.Text("Data:"), sg.In(key='data'), sg.CalendarButton(target='data', button_text="Selecionar", format="%Y-%m-%d")],
+        [sg.Text("Hora:"), sg.Input(key="hora")],
+        [sg.Button("Salvar")]
+    ]
+
+    window = sg.Window("Adicionar Sessao", layout)
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
+        elif event == "Salvar":
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    query = f"insert into Sessao (Data, Hora, Aula_Codigo) values {values['data'], values['hora'], codigo}"
+                    cursor.execute(query)
+                    conexao.commit()
+            window.close()
+            break
+
+def addTreino(responsavel):
+    with sql.conecta() as conexao:
+        with conexao.cursor() as cursor:
+            cursor.execute("select * from aluno")
+            alunos = cursor.fetchall()
+
+    cpfs = dict()
+    for x in alunos:
+        cpfs[x['nome']] = x['CPF']
+    alunos = [x['nome'] for x in alunos]
+
+    layout = [
+        [sg.Text("Aluno:"), sg.Combo(alunos, key='aluno')],
+        [sg.Text("Tipo:"), sg.Input(key="tipo")],
+        [sg.Button("Proximo")]
+    ]
+
+    window = sg.Window("Adicionar Treino", layout)
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
+        elif event == "Proximo":
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    query = f"insert into Treino (Aluno_CPF, Tipo, Instrutor_CPF) values {cpfs[values['aluno']], values['tipo'], responsavel}"
+                    cursor.execute(query)
+                    conexao.commit()
+            window.close()
+            addExercios(cpfs[values['aluno']], values['tipo'])
+            break
+
+
+def addExercios(cpf, tipo):
+    with sql.conecta() as conexao:
+        with conexao.cursor() as cursor:
+            query = f"select Nome, Series, Repeticoes, Carga from Exercicio where (Treino_Aluno_CPF = {cpf} and Treino_Tipo = '{tipo}')"
+            print(query)
+            cursor.execute(query)
+            exercicios = cursor.fetchall()
+            exercicios = [list(d.values()) for d in exercicios]
+            heading = ['Nome', 'Series', 'Repeticoes', 'Carga']
+
+
+    layout = [
+        [sg.Text("Tipo: " + tipo)],
+        [sg.Button("Adicionar Exercicio")],
+        [sg.Text("Exercicios:")],
+        [sg.Table(values=exercicios, headings=heading, key='exercicio')],
+    ]
+    window = sg.Window("Adicionar Exercicios", layout)
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
+        elif event == "Adicionar Exercicio":
+            addExercio(cpf, tipo)
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    cursor.execute(
+                        f"select Nome, Series, Repeticoes, Carga from Exercicio where Treino_Aluno_CPF = {cpf} and Treino_Tipo = '{tipo}'")
+                    exercicios = cursor.fetchall()
+                    exercicios = [list(d.values()) for d in exercicios]
+                    window['exercicio'].update(values=exercicios)
+
+def addExercio(cpf,tipo):
+    layout = [
+        [sg.Text("Nome:"), sg.Input(key='nome')],
+        [sg.Text("Series:"), sg.Input(key='series')],
+        [sg.Text("Repeticoes"), sg.Input(key='repeticoes')],
+        [sg.Text("Carga:"), sg.Input(key='carga')],
+        [sg.Button("Salvar")]
+    ]
+
+    window = sg.Window("Adicionar Exercicio", layout)
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
+        elif event == "Salvar":
+            with sql.conecta() as conexao:
+                with conexao.cursor() as cursor:
+                    query = f"insert into Exercicio (Nome, Series, Repeticoes, Carga, Treino_Aluno_CPF, Treino_Tipo) values {values['nome'], values['series'], values['repeticoes'], values['carga'], cpf, tipo}"
+                    cursor.execute(query)
+                    conexao.commit()
+                    window.close()
+                    break
 
 
 def createUser():
